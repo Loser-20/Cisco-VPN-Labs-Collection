@@ -1,0 +1,128 @@
+First Configure all devices with their IPs:
+OSPF Commands:
+✅R0 -
+Router ospf 1
+Network 192.168.1.0 0.0.0.255 area 0
+Network 192.168.3.0 0.0.0.255 area 0
+--------------------------------------
+✅R1 -
+Router ospf 1
+Network 192.168.4.0 0.0.0.255 area 0
+Network 192.168.2.0 0.0.0.255 area 0
+--------------------------------------
+✅R2 -
+Router ospf 1
+Network 192.168.1.0 0.0.0.255 area 0
+Network 192.168.2.0 0.0.0.255 area 0
+---------------------------------------------------------------------
+IPsec Configs:
+
+HQ - 
+access-list 100 permit ip 192.168.3.0 0.0.0.255 192.168.4.0 0.0.0.255
+crypto isakmp policy 10
+authentication pre-share
+crypto isakmp key Pass@123 address 192.168.2.2
+crypto ipsec transform-set HQ->Br1 esp-aes 256 esp-sha-hmac
+crypto map IPSEC-MAP 10 ipsec-isakmp
+ set peer 192.168.2.2
+ set transform-set HQ->Br1
+ match address 100
+interface GigabitEthernet0/0/0
+ crypto map IPSEC-MAP
+
+----------------------------------------------------
+BR-
+access-list 100 permit ip 192.168.4.0 0.0.0.255 192.168.3.0 0.0.0.255
+crypto isakmp policy 10
+authentication pre-share
+crypto isakmp key Pass@123 address 192.168.1.2
+crypto ipsec transform-set Br1->HQ esp-aes 256 esp-sha-hmac
+crypto map IPSEC-MAP 10 ipsec-isakmp
+ set peer 192.168.1.2
+ set transform-set Br1->HQ
+ match address 100
+interface GigabitEthernet0/0/0
+ crypto map IPSEC-MAP
+
+-----------------------------------------------------------------------------------------------------------
+Command Explanation -
+
+HQ Router Configuration
+✅ access-list 100 permit ip 192.168.3.0 0.0.0.255 192.168.4.0 0.0.0.255
+Defines the “interesting traffic” that should be encrypted by IPSec.
+Purpose: Without this ACL, the router won’t know which traffic to protect, and the VPN tunnel will never trigger.
+✅ crypto isakmp policy 10
+Creates an ISAKMP (IKE Phase 1) policy with priority 10.
+Purpose: This sets the negotiation parameters for building a secure channel; without it, peers cannot agree on encryption/authentication.
+✅ authentication pre-share
+Specifies that the authentication method for IKE Phase 1 will be a pre-shared key.
+Importance: Ensures both peers trust each other before exchanging keys; without authentication, the tunnel is insecure.
+✅ crypto isakmp key Pass@123 address 192.168.2.2
+Sets the pre-shared key (Pass@123) for the remote peer at IP 192.168.2.2.
+Purpose: This key is critical for Phase 1 authentication; mismatched keys will prevent tunnel establishment.
+✅ crypto ipsec transform-set HQ->Br1 esp-aes 256 esp-sha-hmac
+Defines the IPSec transform-set (Phase 2 parameters).
+Importance: Specifies encryption and integrity algorithms; without this, IPSec cannot secure data packets.
+✅ crypto map IPSEC-MAP 10 ipsec-isakmp
+Creates a crypto map named IPSEC-MAP with sequence number 10.
+Purpose: The crypto map binds all IPSec settings together; without it, the router cannot apply IPSec to traffic.
+✅ set peer 192.168.2.2
+Specifies the remote peer’s IP address (Branch router).
+Importance: Tells the router where to send encrypted traffic; without this, the tunnel cannot form.
+✅ set transform-set HQ->Br1
+Associates the previously defined transform-set with this crypto map.
+Purpose: Ensures the correct encryption algorithms are used for Phase 2; missing this breaks IPSec negotiation.
+✅ match address 100
+Links the ACL (interesting traffic) to the crypto map so only that traffic is encrypted.
+Importance: Prevents encrypting all traffic; without this, IPSec may fail or encrypt unintended traffic.
+✅ interface GigabitEthernet0/0/0
+Enters the WAN interface configuration mode.
+Purpose: Needed to apply IPSec on the correct interface; without this, the tunnel won’t activate.
+✅ crypto map IPSEC-MAP
+Applies the crypto map to the WAN interface, activating IPSec for matching traffic.
+Importance: This is the final step; without applying the crypto map, the VPN will never come up.
+
+-----------------------------------------------------------------------------------------------------------
+
+Branch Router Configuration
+✅ access-list 100 permit ip 192.168.4.0 0.0.0.255 192.168.3.0 0.0.0.255
+Defines interesting traffic for Branch: traffic between Branch LAN and HQ LAN.
+Purpose: Identifies which packets should be encrypted; without this, the tunnel won’t trigger.
+✅ crypto isakmp policy 10
+Creates ISAKMP policy with priority 10 (must match HQ’s parameters).
+Importance: Negotiates Phase 1 security; mismatched policies will fail tunnel setup.
+✅ authentication pre-share
+Uses pre-shared key authentication for IKE Phase 1.
+Purpose: Provides mutual trust; without authentication, the tunnel is insecure.
+✅ crypto isakmp key Pass@123 address 192.168.1.2
+Sets the pre-shared key for the HQ peer at IP 192.168.1.2.
+Importance: Critical for Phase 1; mismatched keys = no tunnel.
+✅ crypto ipsec transform-set Br1->HQ esp-aes 256 esp-sha-hmac
+Defines IPSec transform-set for Branch side.
+Purpose: Specifies encryption/integrity; without this, Phase 2 fails.
+✅ crypto map IPSEC-MAP 10 ipsec-isakmp
+Creates crypto map named IPSEC-MAP with sequence number 10.
+Importance: Combines IPSec settings; without it, IPSec cannot apply.
+✅ set peer 192.168.1.2
+Specifies HQ router’s IP address.
+Purpose: Directs encrypted traffic to the correct peer; missing this breaks the tunnel.
+✅ set transform-set Br1->HQ
+Associates Branch’s transform-set with the crypto map.
+Importance: Ensures correct encryption algorithms; without this, IPSec negotiation fails.
+✅ match address 100
+Links ACL to crypto map for interesting traffic.
+Purpose: Controls which traffic is encrypted; missing this causes IPSec failure or misbehavior.
+✅ interface GigabitEthernet0/0/0
+Enters WAN interface configuration mode.
+Importance: Needed to apply IPSec on the correct interface.
+✅ crypto map IPSEC-MAP
+Applies crypto map to Branch WAN interface.
+Purpose: Activates IPSec; without this, the tunnel will never come up.
+-----------------------------------------------------------------------------------------------------------
+
+✅ Summary:
+
+ACL defines traffic to encrypt.
+ISAKMP policy + key handles Phase 1 (IKE).
+Transform-set handles Phase 2 (IPSec).
+Crypto map ties everything together and applies to the interface.
